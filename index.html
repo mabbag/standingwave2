@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>정상파 시뮬레이션</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 수식(분수) 표현을 위한 커스텀 CSS */
+        .frac {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            vertical-align: middle;
+            margin: 0 0.2rem;
+            line-height: 1;
+        }
+        .frac .num {
+            border-bottom: 1px solid #1f2937;
+            padding: 0 0.2rem 0.1rem 0.2rem;
+        }
+        .frac .den {
+            padding: 0.1rem 0.2rem 0 0.2rem;
+        }
+        
+        /* 캔버스 둥근 테두리 및 그림자 효과 */
+        canvas {
+            width: 100%;
+            height: 100%;
+            border-radius: 0.5rem;
+            display: block;
+        }
+        
+        /* 애니메이션 트랜지션 */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-gray-800 font-sans min-h-screen pb-12">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b border-gray-200 py-6 px-4 mb-8">
+        <div class="max-w-5xl mx-auto">
+            <h1 class="text-3xl font-extrabold text-gray-900 mb-2">정상파(Standing Wave) 시뮬레이션</h1>
+            <div class="bg-teal-50 border-l-4 border-teal-500 p-4 rounded-r-md mt-4">
+                <p class="font-bold text-teal-800">학습목표</p>
+                <p class="text-teal-900 mt-1">현악기와 관악기에서 나는 소리를 정상파의 배 진동으로 이해할 수 있다.</p>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-4">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- 왼쪽: 조작 패널 -->
+            <div class="lg:col-span-4 space-y-6">
+                
+                <!-- 악기 선택 -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+                    <h2 class="text-lg font-bold mb-4 flex items-center">
+                        <span class="bg-teal-100 text-teal-800 rounded-full w-6 h-6 inline-flex items-center justify-center mr-2 text-sm">1</span>
+                        악기 종류 선택
+                    </h2>
+                    <div class="space-y-3">
+                        <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors" id="label-string">
+                            <input type="radio" name="instrument" value="string" class="w-5 h-5 text-teal-600" checked onchange="changeInstrument('string')">
+                            <div class="ml-3">
+                                <span class="block font-bold">현악기</span>
+                                <span class="text-sm text-gray-500">양쪽 끝이 고정됨 (마디)</span>
+                            </div>
+                        </label>
+                        <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors" id="label-open">
+                            <input type="radio" name="instrument" value="open" class="w-5 h-5 text-teal-600" onchange="changeInstrument('open')">
+                            <div class="ml-3">
+                                <span class="block font-bold">양쪽 열린 관악기</span>
+                                <span class="text-sm text-gray-500">양쪽 끝이 열림 (배)</span>
+                            </div>
+                        </label>
+                        <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors" id="label-closed">
+                            <input type="radio" name="instrument" value="closed" class="w-5 h-5 text-teal-600" onchange="changeInstrument('closed')">
+                            <div class="ml-3">
+                                <span class="block font-bold">한쪽 막힌 관악기</span>
+                                <span class="text-sm text-gray-500">한쪽 열림(배), 한쪽 막힘(마디)</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 진동 배수 선택 -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+                    <h2 class="text-lg font-bold mb-4 flex items-center">
+                        <span class="bg-teal-100 text-teal-800 rounded-full w-6 h-6 inline-flex items-center justify-center mr-2 text-sm">2</span>
+                        진동 배수 조절
+                    </h2>
+                    <p class="text-sm text-gray-600 mb-3" id="harmonic-desc">원하는 배 진동 버튼을 눌러 파형을 확인하세요.</p>
+                    <div class="flex flex-wrap gap-2" id="harmonic-buttons">
+                        <!-- JS에서 동적으로 생성됨 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 오른쪽: 시각화 및 수식 -->
+            <div class="lg:col-span-8 flex flex-col space-y-6">
+                
+                <!-- 캔버스 (시뮬레이션 화면) -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 relative">
+                    <h3 class="text-center font-bold text-gray-700 mb-2" id="canvas-title">현악기에서의 정상파</h3>
+                    <div class="relative w-full h-64 bg-gray-100 rounded-lg overflow-hidden border border-gray-200">
+                        <canvas id="waveCanvas"></canvas>
+                        <!-- 길이 표시 l 화살표 (HTML 오버레이) -->
+                        <div class="absolute top-2 left-0 right-0 flex justify-center items-center px-12 pointer-events-none">
+                            <div class="flex-grow border-t border-gray-500 relative">
+                                <div class="absolute left-0 top-[-4px] w-2 h-2 border-l border-b border-gray-500 transform rotate-45"></div>
+                            </div>
+                            <span class="px-2 text-gray-700 font-serif italic text-lg">l</span>
+                            <div class="flex-grow border-t border-gray-500 relative">
+                                <div class="absolute right-0 top-[-4px] w-2 h-2 border-r border-t border-gray-500 transform rotate-45"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 수식 및 결과창 -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 grid grid-cols-1 md:grid-cols-2 gap-6 items-center fade-in" id="formula-container">
+                    
+                    <!-- 현재 진동 상태 수식 -->
+                    <div class="border-r-0 md:border-r border-gray-200 pr-0 md:pr-6">
+                        <h4 class="font-bold text-teal-700 mb-4 text-center border-b pb-2" id="current-state-title">기본 진동 (n=1)</h4>
+                        
+                        <div class="flex flex-col items-center space-y-4 text-lg">
+                            <!-- 파장 식 -->
+                            <div class="flex items-center" id="specific-wavelength">
+                                <span class="font-serif italic mr-2">λ₁</span> = 
+                                <span class="ml-2 font-serif italic">2l</span>
+                            </div>
+                            <!-- 진동수 식 -->
+                            <div class="flex items-center" id="specific-frequency">
+                                <span class="font-serif italic mr-2">f₁</span> = 
+                                <div class="frac mx-2 font-serif italic"><span class="num">v</span><span class="den">λ₁</span></div> = 
+                                <div class="frac mx-2 font-serif italic"><span class="num">v</span><span class="den">2l</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 일반화 수식 -->
+                    <div class="pl-0 md:pl-2">
+                        <h4 class="font-bold text-gray-600 mb-4 text-center border-b pb-2">일반 공식</h4>
+                        
+                        <div class="flex flex-col items-center space-y-4 text-lg bg-gray-50 p-4 rounded-lg">
+                            <div class="flex items-center" id="general-wavelength">
+                                <span class="font-serif italic mr-2">λ<sub class="text-xs">n</sub></span> = 
+                                <div class="frac mx-2 font-serif italic"><span class="num">2l</span><span class="den">n</span></div>
+                            </div>
+                            <div class="flex items-center" id="general-frequency">
+                                <span class="font-serif italic mr-2">f<sub class="text-xs">n</sub></span> = 
+                                <div class="frac mx-2 font-serif italic"><span class="num">v</span><span class="den">λ<sub class="text-xs">n</sub></span></div> = 
+                                <div class="frac mx-2 font-serif italic"><span class="num">v</span><span class="den">2l</span></div><span class="font-serif italic">n</span>
+                            </div>
+                            <div class="text-sm text-gray-500 mt-2 font-serif italic" id="general-n-values">
+                                (n = 1, 2, 3, ···)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 퀴즈 섹션 -->
+        <div class="mt-12 bg-white p-8 rounded-xl shadow-md border-t-4 border-teal-500">
+            <h2 class="text-2xl font-bold mb-2 text-teal-800">✅ 이제 내가 이해했는지 확인해보자!</h2>
+            <p class="text-gray-600 mb-6">시뮬레이션을 충분히 조작해 보았다면 아래 문제를 풀어보세요.</p>
+            
+            <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+                <p class="text-lg font-bold mb-4">Q. 길이가 <span class="font-serif italic">l</span>인 <span class="text-red-500 underline decoration-2">한쪽이 막힌 관악기</span>에서 <span class="text-blue-500 underline decoration-2">3배 진동(n=3)</span>이 일어날 때, 이때 만들어지는 정상파의 파장(<span class="font-serif italic">λ</span>)을 올바르게 나타낸 식은 무엇일까요?</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                    <button onclick="checkQuiz(1)" class="quiz-btn w-full text-left p-4 bg-white border-2 border-gray-200 rounded-lg hover:border-teal-500 hover:bg-teal-50 transition-all font-serif italic text-lg text-center">
+                        ① λ = 2l
+                    </button>
+                    <button onclick="checkQuiz(2)" class="quiz-btn w-full text-left p-4 bg-white border-2 border-gray-200 rounded-lg hover:border-teal-500 hover:bg-teal-50 transition-all font-serif italic text-lg text-center">
+                        ② λ = l
+                    </button>
+                    <button onclick="checkQuiz(3)" class="quiz-btn w-full text-left p-4 bg-white border-2 border-gray-200 rounded-lg hover:border-teal-500 hover:bg-teal-50 transition-all font-serif italic text-lg text-center flex items-center justify-center">
+                        ③ λ = <div class="frac mx-2 font-serif italic"><span class="num">4</span><span class="den">3</span></div>l
+                    </button>
+                    <button onclick="checkQuiz(4)" class="quiz-btn w-full text-left p-4 bg-white border-2 border-gray-200 rounded-lg hover:border-teal-500 hover:bg-teal-50 transition-all font-serif italic text-lg text-center flex items-center justify-center">
+                        ④ λ = <div class="frac mx-2 font-serif italic"><span class="num">2</span><span class="den">3</span></div>l
+                    </button>
+                </div>
+
+                <!-- 퀴즈 결과 메세지 -->
+                <div id="quiz-feedback" class="mt-6 p-4 rounded-lg hidden"></div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // --- 1. 상태 및 데이터 정의 ---
+        
+        // 악기별 설정 데이터
+        const instrumentsData = {
+            string: {
+                id: 'string',
+                title: '현악기에서의 정상파',
+                desc: '양쪽 끝에서 마디가 생긴다.',
+                allowedN: [1, 2, 3],
+                generalDenom: '2', 
+                nValuesStr: '(n = 1, 2, 3, ···)'
+            },
+            open: {
+                id: 'open',
+                title: '양쪽이 열린 관악기에서의 정상파',
+                desc: '양쪽 끝에서 배가 생긴다.',
+                allowedN: [1, 2, 3],
+                generalDenom: '2',
+                nValuesStr: '(n = 1, 2, 3, ···)'
+            },
+            closed: {
+                id: 'closed',
+                title: '한쪽이 막힌 관악기에서의 정상파',
+                desc: '막힌 쪽 끝에서 마디가 생긴다.',
+                allowedN: [1, 3, 5], // 한쪽 막힌 관은 홀수 배 진동만 가능
+                generalDenom: '4',
+                nValuesStr: '(n = 1, 3, 5, ···)'
+            }
+        };
+
+        // 현재 상태 변수
+        let currentInstrument = 'string';
+        let currentN = 1;
+        
+        // 캔버스 및 애니메이션 변수
+        const canvas = document.getElementById('waveCanvas');
+        const ctx = canvas.getContext('2d');
+        let animationId;
+        let time = 0;
+
+        // 색상 팔레트 (사진 기반)
+        const COLORS = {
+            bgPink: '#FCE7F0',      // 연한 분홍색 배경
+            tealBorder: '#2E8B99',  // 청록색 경계면
+            wavePink: '#D14285',    // 진한 분홍색 파동 선
+            waveFaint: 'rgba(209, 66, 133, 0.15)' // 전체 영역 표시용 옅은 색
+        };
+
+        // --- 2. 초기화 및 이벤트 리스너 ---
+
+        function init() {
+            // 캔버스 크기 조정
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // 초기 UI 세팅
+            updateUI();
+            
+            // 애니메이션 시작
+            animate();
+        }
+
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        }
+
+        // --- 3. UI 업데이트 로직 ---
+
+        // 악기 변경 시 호출
+        function changeInstrument(type) {
+            currentInstrument = type;
+            // 악기가 바뀌면 n값은 허용된 첫 번째 값으로 리셋
+            currentN = instrumentsData[type].allowedN[0];
+            
+            // 라디오 버튼 스타일 업데이트
+            document.querySelectorAll('label').forEach(lbl => {
+                lbl.classList.remove('border-teal-500', 'bg-teal-50');
+                lbl.classList.add('border-gray-200');
+            });
+            const activeLabel = document.getElementById('label-' + type);
+            activeLabel.classList.remove('border-gray-200');
+            activeLabel.classList.add('border-teal-500', 'bg-teal-50');
+
+            updateUI();
+        }
+
+        // 진동 배수(n) 변경 시 호출
+        function setHarmonic(n) {
+            currentN = n;
+            updateUI();
+        }
+
+        function updateUI() {
+            const data = instrumentsData[currentInstrument];
+            
+            // 타이틀 변경
+            document.getElementById('canvas-title').innerText = `${data.title} - ${data.desc}`;
+
+            // 진동 배수 버튼 동적 생성
+            const btnContainer = document.getElementById('harmonic-buttons');
+            btnContainer.innerHTML = '';
+            
+            data.allowedN.forEach(n => {
+                const btn = document.createElement('button');
+                btn.className = `whitespace-nowrap px-4 py-2 rounded-lg font-bold transition-colors ${
+                    currentN === n 
+                    ? 'bg-teal-600 text-white shadow-md' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`;
+                btn.innerText = `${n}배 진동`;
+                btn.onclick = () => setHarmonic(n);
+                btnContainer.appendChild(btn);
+            });
+
+            // 막힌 관일 때 부연 설명
+            const descElem = document.getElementById('harmonic-desc');
+            if(currentInstrument === 'closed') {
+                descElem.innerHTML = "한쪽 막힌 관은 <strong>홀수(1, 3, 5...) 배 진동</strong>만 일어납니다.";
+                descElem.classList.add('text-red-600');
+            } else {
+                descElem.innerText = "원하는 배 진동 버튼을 눌러 파형을 확인하세요.";
+                descElem.classList.remove('text-red-600');
+            }
+
+            // 수식 업데이트 (DOM 조작)
+            updateFormulas(data);
+            
+            // 수식 컨테이너 애니메이션 리트리거
+            const formulaCont = document.getElementById('formula-container');
+            formulaCont.classList.remove('fade-in');
+            void formulaCont.offsetWidth; // trigger reflow
+            formulaCont.classList.add('fade-in');
+        }
+
+        // 수식 문자열 생성 헬퍼 함수
+        function getFractionHTML(num, den) {
+            return `<div class="frac mx-1 font-serif italic"><span class="num">${num}</span><span class="den">${den}</span></div>`;
+        }
+
+        function updateFormulas(data) {
+            document.getElementById('current-state-title').innerText = `${currentN}배 진동 (n=${currentN})`;
+
+            const L_denom = data.generalDenom; // '2' or '4'
+            let waveLengthHTML = '';
+            let freqHTML = '';
+
+            // 특정 n에 대한 수식 (약분 처리 포함)
+            // 파장 = (2l or 4l) / n
+            if (currentN === 1) {
+                waveLengthHTML = `<span class="font-serif italic mr-2">λ₁</span> = <span class="font-serif italic">${L_denom}l</span>`;
+                freqHTML = `<span class="font-serif italic mr-2">f₁</span> = ${getFractionHTML('v', 'λ₁')} = ${getFractionHTML('v', L_denom + 'l')}`;
+            } else {
+                let gcd = function(a, b) { return b ? gcd(b, a % b) : a; };
+                let g = gcd(parseInt(L_denom), currentN);
+                let numStr = (parseInt(L_denom)/g) === 1 ? '' : (parseInt(L_denom)/g);
+                let denStr = (currentN/g) === 1 ? '' : (currentN/g);
+                
+                let fracPart = '';
+                if(denStr === '') {
+                    fracPart = `<span class="font-serif italic">${numStr}l</span>`;
+                } else {
+                    fracPart = `${getFractionHTML(numStr, denStr)}<span class="font-serif italic">l</span>`;
+                }
+
+                waveLengthHTML = `<span class="font-serif italic mr-2">λ<sub class="text-xs">${currentN}</sub></span> = ${fracPart}`;
+                
+                // 진동수 f_n = n * f_1
+                let f1Coef = currentN;
+                let vfCoef = `${currentN}v`;
+                
+                freqHTML = `<span class="font-serif italic mr-2">f<sub class="text-xs">${currentN}</sub></span> = ${getFractionHTML(vfCoef, L_denom + 'l')} = ${f1Coef}<span class="font-serif italic">f₁</span>`;
+            }
+
+            document.getElementById('specific-wavelength').innerHTML = waveLengthHTML;
+            document.getElementById('specific-frequency').innerHTML = freqHTML;
+
+            // 일반화 수식 업데이트
+            document.getElementById('general-wavelength').innerHTML = 
+                `<span class="font-serif italic mr-2">λ<sub class="text-xs">n</sub></span> = ${getFractionHTML(L_denom + 'l', 'n')}`;
+            
+            document.getElementById('general-frequency').innerHTML = 
+                `<span class="font-serif italic mr-2">f<sub class="text-xs">n</sub></span> = ${getFractionHTML('v', 'λ<sub class="text-xs">n</sub>')} = ${getFractionHTML('v', L_denom + 'l')}<span class="font-serif italic">n</span>`;
+            
+            document.getElementById('general-n-values').innerText = data.nValuesStr;
+        }
+
+
+        // --- 4. 캔버스 애니메이션 로직 ---
+
+        function animate() {
+            time += 0.05; // 애니메이션 속도 조절
+            draw();
+            animationId = requestAnimationFrame(animate);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const w = canvas.width;
+            const h = canvas.height;
+            const paddingX = 40; // 좌우 여백
+            const paddingY = 20; // 상하 여백
+            const L = w - paddingX * 2; // 파동이 그려지는 실제 길이
+            const A = (h - paddingY * 2) / 2; // 최대 진폭
+            const startY = h / 2;
+            const startX = paddingX;
+
+            // 1. 연한 분홍색 배경 그리기 (파동 영역)
+            ctx.fillStyle = COLORS.bgPink;
+            ctx.fillRect(startX, paddingY, L, h - paddingY * 2);
+
+            // 2. 경계선 (청록색) 그리기
+            ctx.fillStyle = COLORS.tealBorder;
+            const bWidth = 8; // 경계선 두께
+
+            if (currentInstrument === 'string') {
+                // 현악기: 양쪽 수직 기둥 (고정단)
+                ctx.fillRect(startX - bWidth, paddingY - 10, bWidth, (h - paddingY * 2) + 20);
+                ctx.fillRect(startX + L, paddingY - 10, bWidth, (h - paddingY * 2) + 20);
+            } 
+            else if (currentInstrument === 'open') {
+                // 열린 관: 위아래 수평 벽 (관)
+                ctx.fillRect(startX - 10, paddingY - bWidth, L + 20, bWidth);
+                ctx.fillRect(startX - 10, h - paddingY, L + 20, bWidth);
+            }
+            else if (currentInstrument === 'closed') {
+                // 막힌 관: 위아래 수평 벽 + 오른쪽 수직 벽
+                ctx.fillRect(startX - 10, paddingY - bWidth, L + 10 + bWidth, bWidth); // 윗벽
+                ctx.fillRect(startX - 10, h - paddingY, L + 10 + bWidth, bWidth); // 아랫벽
+                ctx.fillRect(startX + L, paddingY - bWidth, bWidth, (h - paddingY * 2) + bWidth * 2); // 오른쪽 닫힌 벽
+            }
+
+            // 3. 중심선 (가이드용 희미한 점선)
+            ctx.beginPath();
+            ctx.setLineDash([5, 5]);
+            ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(startX + L, startY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 4. 파동 애니메이션 그리기
+            
+            // 전체 Envelope(진폭의 최대 범위)를 희미하게 그려줌 (시각적 이해를 돕기 위함)
+            ctx.beginPath();
+            ctx.fillStyle = COLORS.waveFaint;
+            for (let x = 0; x <= L; x++) {
+                let env = getEnvelope(x, L, currentInstrument, currentN);
+                if (x === 0) ctx.moveTo(startX + x, startY - A * env);
+                else ctx.lineTo(startX + x, startY - A * env);
+            }
+            for (let x = L; x >= 0; x--) {
+                let env = getEnvelope(x, L, currentInstrument, currentN);
+                ctx.lineTo(startX + x, startY + A * env); // 아래쪽 대칭
+            }
+            ctx.fill();
+
+            // 실제 움직이는 파동 선 (시간에 따라 진동)
+            ctx.beginPath();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = COLORS.wavePink;
+            ctx.lineJoin = 'round';
+
+            for (let x = 0; x <= L; x++) {
+                // Envelope 값 (공간적 형태)
+                let env = getEnvelope(x, L, currentInstrument, currentN);
+                
+                // 시간 진동 (코사인) 적용
+                let y = env * Math.cos(time) * A;
+                
+                if (x === 0) ctx.moveTo(startX + x, startY - y);
+                else ctx.lineTo(startX + x, startY - y);
+            }
+            ctx.stroke();
+        }
+
+        // x 위치에 따른 진폭 봉투(Envelope) 값을 반환하는 수학 함수
+        function getEnvelope(x, L, type, n) {
+            if (type === 'string') {
+                // 양쪽 마디 (sin 함수)
+                return Math.sin((Math.PI * n * x) / L);
+            } else if (type === 'open') {
+                // 양쪽 배 (cos 함수)
+                return Math.cos((Math.PI * n * x) / L);
+            } else if (type === 'closed') {
+                // 왼쪽 배(x=0), 오른쪽 마디(x=L) (cos 함수인데 주기가 다름)
+                // n=1일 때 L에서 처음 0이 됨 -> cos(pi/2 * x/L)
+                return Math.cos((Math.PI * n * x) / (2 * L));
+            }
+            return 0;
+        }
+
+        // --- 5. 퀴즈 로직 ---
+        function checkQuiz(selectedNum) {
+            const feedbackElem = document.getElementById('quiz-feedback');
+            const buttons = document.querySelectorAll('.quiz-btn');
+            
+            // 모든 버튼 스타일 초기화
+            buttons.forEach(btn => {
+                btn.classList.remove('bg-teal-50', 'border-teal-500', 'bg-red-50', 'border-red-500', 'opacity-50');
+                btn.classList.add('bg-white', 'border-gray-200');
+            });
+
+            feedbackElem.classList.remove('hidden', 'bg-green-100', 'text-green-800', 'bg-red-100', 'text-red-800');
+            
+            // 정답은 3번 (λ = 4/3 l)
+            if(selectedNum === 3) {
+                // 정답 처리
+                buttons[2].classList.replace('bg-white', 'bg-green-100');
+                buttons[2].classList.replace('border-gray-200', 'border-green-500');
+                
+                feedbackElem.classList.add('bg-green-100', 'text-green-800');
+                feedbackElem.innerHTML = `
+                    <p class="font-bold text-lg mb-1">🎉 정답입니다!</p>
+                    <p>한쪽이 막힌 관악기의 일반 파장 공식은 <strong>λ<sub>n</sub> = 4l / n</strong> 입니다. (n은 홀수)<br>
+                    따라서 3배 진동(n=3)일 때는 <strong>λ = 4/3 l</strong> 가 됩니다.</p>
+                `;
+                
+                // 오답 버튼 희미하게
+                [0, 1, 3].forEach(idx => buttons[idx].classList.add('opacity-50'));
+
+                // 시뮬레이션 상태도 정답과 동일하게 맞춰서 시각적으로 보여주기
+                if(currentInstrument !== 'closed' || currentN !== 3) {
+                    document.querySelector('input[value="closed"]').click(); // 한쪽 막힌 관 선택
+                    setTimeout(() => setHarmonic(3), 100); // 3배 진동 선택
+                    window.scrollTo({ top: 0, behavior: 'smooth' }); // 위로 올려서 보여줌
+                }
+
+            } else {
+                // 오답 처리
+                buttons[selectedNum - 1].classList.replace('bg-white', 'bg-red-100');
+                buttons[selectedNum - 1].classList.replace('border-gray-200', 'border-red-500');
+                
+                feedbackElem.classList.add('bg-red-100', 'text-red-800');
+                feedbackElem.innerHTML = `
+                    <p class="font-bold text-lg mb-1">🤔 아쉽네요, 다시 한 번 생각해볼까요?</p>
+                    <p>위 시뮬레이션에서 <strong>'한쪽 막힌 관악기'</strong> 탭을 누르고 <strong>'3배 진동'</strong>을 클릭하여 공식을 확인해 보세요!</p>
+                `;
+            }
+        }
+
+        // 스크립트 로드 완료 시 초기화
+        window.onload = init;
+
+    </script>
+</body>
+</html>
