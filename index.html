@@ -370,11 +370,15 @@
 
                 waveLengthHTML = `<span class="font-serif italic mr-2">λ<sub class="text-xs">${currentN}</sub></span> = ${fracPart}`;
                 
-                // 진동수 f_n = n * f_1
+                // 진동수 f_n = n * f_1 (약분 적용)
                 let f1Coef = currentN;
-                let vfCoef = `${currentN}v`;
+                let vNumCoef = currentN / g;
+                let lDenCoef = parseInt(L_denom) / g;
                 
-                freqHTML = `<span class="font-serif italic mr-2">f<sub class="text-xs">${currentN}</sub></span> = ${getFractionHTML(vfCoef, L_denom + 'l')} = ${f1Coef}<span class="font-serif italic">f₁</span>`;
+                let vStr = vNumCoef === 1 ? 'v' : `${vNumCoef}v`;
+                let lStr = lDenCoef === 1 ? 'l' : `${lDenCoef}l`;
+                
+                freqHTML = `<span class="font-serif italic mr-2">f<sub class="text-xs">${currentN}</sub></span> = ${getFractionHTML(vStr, lStr)} = ${f1Coef}<span class="font-serif italic">f₁</span>`;
             }
 
             document.getElementById('specific-wavelength').innerHTML = waveLengthHTML;
